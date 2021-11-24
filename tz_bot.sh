@@ -130,7 +130,7 @@ tg_bot() {
           continue
         }
 
-        local add=$(expr "$mess" : "^/add \(tz[a-zA-Z0-9]\{34\} [a-zA-Z0-9_-]\{1,18\}\)$")
+        local add=$(expr "$mess" : "^/add \(tz[a-zA-Z0-9]\{34\} [a-zA-Z0-9_-]\{1,27\}\)$")
         [ -n "$add" ] && {
           read -r new_addr art_name <<< "$add"
           mkdir -p ${hdir}/${new_addr}
@@ -171,12 +171,49 @@ tg_bot() {
           continue
         }
 
+        local buy_obj=$(expr "$mess" : "^/buy[ |_]\(tz[a-zA-Z0-9]\{34\}[ |_][0-9]\{1,15\}[ |_][0-9]\{1,18\}[,.]\{0,1\}[0-9]\{0,18\}[ ]\{0,1\}[0-9]\{0,18\}[,.]\{0,1\}[0-9]\{0,6\}\)$"|tr '_' ' '|tr "," ".")
+        max_price=""
+        fee=""
+        [ -n "${buy_obj}" ] && {
+          read -r addr token_id max_price fee <<< "$buy_obj"
+          otokdir=${hdir}/${addr}/objkt_tokens
+          [ ! -d ${otokdir} ] && mkdir -p $otokdir
+          tok_file="${hdir}/tokens/${token_id}"
+          o_tok_file="${otokdir}/${token_id}"
+          #[ -e "$o_tok_file" ] && {
+            [ -z "$fee" ] && fee="$(<$hdir/default_fee)"
+            [ -z "$fee" ] && {
+              fee="$MIN_FEE"
+              printf "$fee" > ${hdir}/default_fee
+            }
+            printf "$max_price $fee" > ${o_tok_file}
+            printf "$max_price $fee" > ${tok_file}
+            tg_send "Now after the swap the token ($token_id) will be bought if the price less than or equal to $max_price tez and fee: $fee tez%0A/buy_cancel_${addr}_${token_id}" "$tg_user_id"
+            true
+          #} || {
+          #  tg_send "Error: $token_id - unknown token id" "$tg_user_id"
+          #}
+          continue
+        }
+
         local default_fee=$(expr "$mess" : "^/default_fee \([0-9]\{1,18\}[,.]\{0,1\}[0-9]\{0,6\}\)$")
         [ -n "$default_fee" ] && {
           printf "$default_fee" > ${hdir}/default_fee
           tg_send "Now default fee is $default_fee tez" "$tg_user_id"
           continue
         }
+
+        local buy_cancel=$(expr "$mess" : "^/buy_cancel[ |_]\(tz[a-zA-Z0-9]\{34\}[ |_][0-9]\{1,15\}\)$"|tr '_' ' ')
+        [ -n "${buy_cancel}" ] && {
+          read -r addr token_id <<< "$buy_cancel"
+          otokdir=${hdir}/${addr}/objkt_tokens
+          [ ! -d ${otokdir} ] && continue
+          rm -f "${hdir}/tokens/${token_id}"
+          rm -f "${otokdir}/${token_id}"
+          tg_send "Purchase canceled ($token_id)" "$tg_user_id"
+          continue
+        }
+
 
         tg_send "Error: unknown command or incorrect syntax" "$tg_user_id"
       done <<< $(wget -q --no-cookies --no-check-certificate -T 9 \
@@ -212,6 +249,8 @@ do
 
   DIR=${DB_DIR}/${chat_id}/${addr}
   tokdir=${DB_DIR}/${chat_id}/tokens
+  objkt_tokdir=${DB_DIR}/${chat_id}/${addr}/objkt_tokens
+  
 
   target_link0="https://tzkt.io/${addr}/operations/"
   target_link1="https://hicetnunc.art/tz/${addr}"
@@ -227,10 +266,9 @@ do
     amount="$arg4"
 
     log "[INFO] $user_name swaped on objkt $amount by $price (id:${token_id}, magic:${magic})"
-    tg_send "$user_name swaped on objkt $amount by $price (id:${token_id}, magic:${magic})" "${chat_id}"
-    continue
-    tok_file=${tokdir}/${token_id}
+    tok_file=${objkt_tokdir}/${token_id}
     [ -e $tok_file ] && {
+      tg_send "$user_name swaped on objkt $amount by $price (id:${token_id}, magic:${magic})" "${chat_id}"
       token=$(cat $tok_file)
       [ "$token" == "0" ] && {
         rm $tok_file
@@ -271,15 +309,26 @@ do
       rm $tok_file
     }
   }
+
+  [ "$action" == "objkt_auct" ] && {
+    tg_send "${user_name} created an <a href='https://objkt.com/profile/${addr}/created'>auction</a>" "$chat_id"
+  }
+
   [ "$action" == "objkt_mint" ] && {
     token_id="$arg1"
     amount="$arg2"
     collection="$arg3"
-    log "[INFO] objct_minted $amount ($token_id)"
-    buy_links="/buy_${token_id}_15%0A/buy_${token_id}_30%0A/buy_${token_id}_50%0A/buy_${token_id}_100"
-    tg_send "<b>${user_name} minted on objkt: $amount (id: $token_id)</b>%0A<a href=\"$target_link0\">tzkt.io</a>%0A<a href=\"$target_link1\">hicetnunc.art</a>%0A<a href=\"$target_link2\">nftbiker.xyz</a>%0A${buy_links}" "${chat_id}"
-    [ ! -e ${tokdir} ] && mkdir ${tokdir}
-    #printf "0" > ${tokdir}/${token_id}
+    o_tok_dir=${objkt_tokdir}
+    #/${collection}
+    
+    log "[INFO] objkt_minted $amount ($collection / $token_id)"
+    
+    buy_links="/buy_${addr}_${token_id}_15%0A/buy_${addr}_${token_id}_30%0A/buy_${addr}_${token_id}_50%0A/buy_${addr}_${token_id}_100"
+    
+    tg_send "<b>${user_name} minted on objkt: $amount (id: $collection / $token_id)</b>%0A<a href=\"$target_link0\">tzkt.io</a>%0A<a href=\"$target_link1\">hicetnunc.art</a>%0A<a href=\"$target_link2\">nftbiker.xyz</a>%0A${buy_links}" "${chat_id}"
+    
+    [ ! -e ${o_tok_dir} ] && mkdir -p ${o_tok_dir}
+    printf "0" > ${o_tok_dir}/${token_id}
   }
 
 
@@ -287,10 +336,14 @@ do
     amount="$arg2"
     token_id="$arg1"
     log "[INFO] minted $amount ($token_id)"
-    buy_links="/buy_${token_id}_15%0A/buy_${token_id}_30%0A/buy_${token_id}_50%0A/buy_${token_id}_100"
+    
+    buy_links="/buy_${addr}_${token_id}_15%0A/buy_${addr}_${token_id}_30%0A/buy_${addr}_${token_id}_50%0A/buy_${addr}_${token_id}_100"
+    #buy_links="/buy_${token_id}_15%0A/buy_${token_id}_30%0A/buy_${token_id}_50%0A/buy_${token_id}_100"
     tg_send "<b>${user_name} minted: $amount (id: $token_id)</b>%0A<a href=\"$target_link0\">tzkt.io</a>%0A<a href=\"$target_link1\">hicetnunc.art</a>%0A<a href=\"$target_link2\">nftbiker.xyz</a>%0A${buy_links}" "${chat_id}"
     [ ! -e ${tokdir} ] && mkdir ${tokdir}
     printf "0" > ${tokdir}/${token_id}
+    [ ! -e ${objkt_tokdir} ] && mkdir -p ${objkt_tokdir}
+    printf "0" > ${objkt_tokdir}/${token_id}
   }
 
   [ "$action" == "swap" ] && {
@@ -300,13 +353,16 @@ do
     token_id="$arg2"
     magic="$arg1"
 
-    log "[INFO] $user_name swaped $amount by $price (id:${token_id}, magic:${magic})"
-    tg_send "$user_name swaped $amount by $price (id:${token_id}, magic:${magic})" "${chat_id}"
+    mess="[INFO] $user_name swaped at hic $amount by $price (id:${token_id}, magic:${magic})"
+    log "$mess"
     tok_file=${tokdir}/${token_id}
+    o_tok_file=${objkt_tokdir}/${token_id}
     [ -e $tok_file ] && {
+      tg_send "$mess" "${chat_id}"
       token=$(cat $tok_file)
       [ "$token" == "0" ] && {
         rm $tok_file
+        rm $o_tok_file
         true
       } || {
         read -r max_price fee <<< "$token"
@@ -342,6 +398,7 @@ do
         tg_send "Token $token_id was not purchased because the $price is higher than the $max_price" "$chat_id"
       }
       rm $tok_file
+      rm $o_tok_file
     }
   }
 done
