@@ -7,20 +7,20 @@ prev_time=''
 while true
 do
   time {
-  cur_time=$(wget -q --no-cookies --no-check-certificate -T 9 \
+  cur_time=$(wget -q --no-cookies --no-check-certificate --dns-timeout=9 --connect-timeout=9 --read-timeout=9 -t 1 \
     -O - $node_url/monitor/bootstrapped | jq -r '.timestamp')
   
   [ "$prev_time" == "$cur_time" ] && { sleep 2; continue; }
   echo "new block!"
-  time wget -q --no-cookies --no-check-certificate -T 9 \
+  time wget -q --no-cookies --no-check-certificate --dns-timeout=9 --connect-timeout=9 --read-timeout=9 -t 1 \
     -O $tmp_file $node_url/chains/main/blocks/head || continue
 
   #last_level=$(jq '.header.level' $tmp_file)
   echo "prepearing"
   time jq -r '.operations[] | .[] | .contents[]' $tmp_file | jq -s '.' > /tmp/last_block.tmp && {
     echo "getting objkt swaps"
-    time jq -r '.[] | select(.parameters != null and .parameters.entrypoint == "ask" and .parameters.value.args[0].args[1].args[0].string == .source)| "objkt_swap \(.source) \(.metadata.operation_result.big_map_diff[0].key.int) \(.parameters.value.args[1].args[0].int) \((.parameters.value.args[1].args[1].args[0].int|tonumber)/1000000) \(.parameters.value.args[0].args[0].int)"' /tmp/last_block.tmp > /tmp/tz_operations.last
-    
+    time jq -r '.[] | select(.parameters != null and .parameters.entrypoint == "ask" and .parameters.value.args[1].args[1].args[1].args[1].args[0][0].args[1].string == .source) | "objkt_swap \(.source) \(.metadata.operation_result.big_map_diff[0].key.int) \(.parameters.value.args[0].args[1].int) \(.parameters.value.args[1].args[1].args[0].int) \(.parameters.value.args[1].args[1].args[1].args[0].int)"' /tmp/last_block.tmp > /tmp/tz_operations.last
+   
     echo "getting objkt mints"
     time jq -r '.[] | select(.parameters != null and .parameters.entrypoint == "mint_artist")| "objkt_mint \(.source) \(.metadata.internal_operation_results[0].parameters.value.args[1].args[1].int) \(.parameters.value.args[0].args[1].int) \(.parameters.value.args[0].args[0].int)"' /tmp/last_block.tmp >> /tmp/tz_operations.last
     
