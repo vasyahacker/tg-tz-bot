@@ -285,8 +285,8 @@ do
           }
           WALLET1="$(<$DB_DIR/${chat_id}/wallet1)"
           TZ_NODE="$(<$DB_DIR/${chat_id}/tz_node)"
-          result="$($TZCLIENT -E $TZ_NODE -w 1 transfer ${price} from $WALLET1 to KT1FvqJwEDWb1Gwc55Jd1jjTHRVWbYKUUpyq --entrypoint 'fulfill_ask' --arg "${magic}" -S 500 --fee $fee --fee-cap 10 --burn-cap 0.02 2>&1 && echo "ACCEPTED!" || echo "FAIL!")"
-          # --simulation
+          result="$($TZCLIENT -E $TZ_NODE transfer ${price} from $WALLET1 to KT1WvzYHCNBvDSdwafTHv7nJ1dWmZ8GCYuuC --entrypoint 'fulfill_ask' --arg "Pair ${magic} None" -S 500 --burn-cap 0.1 --fee $fee 2>&1 && echo "ACCEPTED!" || echo "FAIL!")"
+          # --simulation --fee-cap 10 --burn-cap 0.02
           hash_string="$(echo "$result" | grep -Eo  "Operation hash is '[0-9a-zA-Z]{40,60}'")"
           operation_hash="$(expr "$hash_string" : "^Operation hash is '\([0-9a-zA-Z]\{50,55\}\)'$")"
           operation_link="<a href=\"https://tzkt.io/${operation_hash}\">Operation</a>"
